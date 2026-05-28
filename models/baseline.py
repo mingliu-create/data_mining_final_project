@@ -132,6 +132,25 @@ def predict_bigram(train_df: pd.DataFrame, test_days: list[int], top_p: float = 
     return pred
 
 
+def align_prediction_to_reference(pred: pd.DataFrame, reference: pd.DataFrame) -> pd.DataFrame:
+    """Keep predictions at the same (uid, d, t) keys as the reference trajectory."""
+    keys = reference[["uid", "d", "t"]].drop_duplicates()
+    aligned = keys.merge(pred, on=["uid", "d", "t"], how="left")
+    missing = aligned["x"].isna() | aligned["y"].isna()
+    if missing.any():
+        fallback = pred.groupby("uid")[["x", "y"]].agg(lambda s: s.mode().iloc[0] if not s.mode().empty else 0)
+        for idx, row in aligned.loc[missing, ["uid"]].iterrows():
+            if row["uid"] in fallback.index:
+                aligned.at[idx, "x"] = fallback.loc[row["uid"], "x"]
+                aligned.at[idx, "y"] = fallback.loc[row["uid"], "y"]
+            else:
+                aligned.at[idx, "x"] = 0
+                aligned.at[idx, "y"] = 0
+    return aligned[["uid", "d", "t", "x", "y"]].astype(
+        {"uid": "int64", "d": "int16", "t": "int8", "x": "int16", "y": "int16"}
+    )
+
+
 def run_all_baselines(train_df: pd.DataFrame, test_df: pd.DataFrame) -> dict[str, float]:
     """Run baselines, evaluate, and write reports."""
     test_days = sorted(test_df["d"].unique().astype(int).tolist())
@@ -143,6 +162,8 @@ def run_all_baselines(train_df: pd.DataFrame, test_df: pd.DataFrame) -> dict[str
     }
     scores = {}
     for name, pred in predictions.items():
+        pred = align_prediction_to_reference(pred, test_df)
+        pred.to_csv(f"eval/reports/{name}_predictions.csv", index=False)
         geobleu_result = compute_geobleu(pred, test_df)
         fde_result = compute_fde(pred, test_df)
         generate_report(name, geobleu_result, fde_result)

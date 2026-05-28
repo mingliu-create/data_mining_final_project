@@ -56,3 +56,17 @@ Thumbs.db
 !output/
 !output/figures/
 !output/figures/README.md
+
+# Generated feature/evaluation files; keep folder README files tracked.
+data/grid_clusters.csv
+data/user_hotspots.csv
+data/osm_poi_raw.csv
+data/osm_poi_grid.csv
+eval/reports/*
+!eval/reports/README.md
+models/checkpoints/*
+!models/checkpoints/README.md
+output/*
+!output/figures/
+output/figures/*
+!output/figures/README.md

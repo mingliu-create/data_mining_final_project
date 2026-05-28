@@ -128,9 +128,25 @@
 - [ ] 決定 CVAE 訓練資料規模
   - 選項 A：使用全體約 100,000 名使用者
   - 選項 B：只取活躍天數 >= 30 天的子集
-- [ ] 視記憶體狀況新增 chunk/抽樣讀取模式
+- [x] 新增 chunk/抽樣讀取模式
   - `task1_dataset_kotae.csv` 約 2.2GB
-  - 目前 `load_city()` 會整份讀入記憶體
+  - `load_city()` 支援 `max_users`、`sample_users`、`random_seed`、`chunksize`
+  - `main.py` 支援 `--max-users`、`--sample-users`、`--random-seed`、`--chunksize`
+- [x] 新增 POI 執行選項
+  - `analysis/clustering.py` 已有 POI 查詢、網格對齊、特徵表建立函式
+  - `main.py --fetch-poi` 會實際呼叫 Overpass API
+  - 未加 `--fetch-poi` 時會產生全 0 POI 特徵表，避免每次跑流程都打網路 API
+- [x] 完成小樣本 baseline smoke test
+  - 指令：`--max-users 5 --chunksize 1000000 --skip-features --run-baselines`
+  - train rows = `6,544`
+  - test rows = `1,721`
+  - Per-User Mode GEO-BLEU = `0.196355`
+  - Per-User Mean GEO-BLEU = `0.104883`
+  - Bigram GEO-BLEU = `0.222613`
+  - Bigram top-p 0.7 GEO-BLEU = `0.205013`
+- [x] 完成小樣本 feature engineering smoke test
+  - 指令：`--max-users 5 --chunksize 1000000`
+  - 不抓 POI 時流程可跑通，會產生全 0 POI 特徵表
 
 ---
 
@@ -140,6 +156,12 @@
 
 ```bash
 python main.py --city-path "D:\新增資料夾 (7)\資料探勘\task1_dataset_kotae.csv" --skip-features --run-baselines
+```
+
+用 1,000 個使用者先跑 smoke test：
+
+```bash
+python main.py --city-path "D:\新增資料夾 (7)\資料探勘\task1_dataset_kotae.csv" --max-users 1000 --chunksize 1000000 --skip-features --run-baselines
 ```
 
 baseline 正常後，再跑特徵工程與短輪 CVAE：

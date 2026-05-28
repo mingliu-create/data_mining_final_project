@@ -7,8 +7,10 @@ import pandas as pd
 
 from analysis.clustering import (
     assign_user_hotspots,
+    assign_poi_to_grid,
     build_grid_poi_features,
     compute_grid_density,
+    fetch_poi_from_osm,
     run_hdbscan,
 )
 from analysis.trajectory import build_user_stability_features
@@ -19,24 +21,47 @@ from models.cvae import CVAE, build_condition_table, predict_trajectories, train
 from eval.metrics import compute_fde, compute_geobleu, generate_report
 
 
-def run_preprocessing(city_path: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    df = load_city(city_path)
+def run_preprocessing(
+    city_path: str,
+    max_users: int | None = None,
+    sample_users: int | None = None,
+    random_seed: int = 42,
+    chunksize: int | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    df = load_city(
+        city_path,
+        max_users=max_users,
+        sample_users=sample_users,
+        random_seed=random_seed,
+        chunksize=chunksize,
+    )
     df = label_holidays(df)
     train_df, test_df = split_train_test(df)
-    grid_latlon = build_grid_latlon_table()
+    grid_path = Path("data/grid_to_latlon.csv")
+    if grid_path.exists():
+        grid_latlon = pd.read_csv(grid_path)
+    else:
+        grid_latlon = build_grid_latlon_table(grid_path)
     return train_df, test_df, grid_latlon
 
 
 def run_feature_engineering(
     train_df: pd.DataFrame,
     grid_latlon: pd.DataFrame,
+    fetch_poi: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     density = compute_grid_density(train_df)
     cluster_map = run_hdbscan(density)
     user_hotspots = assign_user_hotspots(train_df, cluster_map)
     user_stability = build_user_stability_features(train_df)
-    # POI fetching is network-bound; create an empty feature table until explicitly fetched.
-    grid_poi_features = build_grid_poi_features(pd.DataFrame(columns=["x", "y", "poi_type", "osm_id"]))
+    if fetch_poi:
+        poi_df = fetch_poi_from_osm(grid_latlon)
+        poi_df.to_csv("data/osm_poi_raw.csv", index=False)
+        poi_grid = assign_poi_to_grid(poi_df, grid_latlon)
+        poi_grid.to_csv("data/osm_poi_grid.csv", index=False)
+    else:
+        poi_grid = pd.DataFrame(columns=["x", "y", "poi_type", "osm_id"])
+    grid_poi_features = build_grid_poi_features(poi_grid)
     user_hotspots.to_csv("data/user_hotspots.csv", index=False)
     cluster_map.to_csv("data/grid_clusters.csv", index=False)
     return cluster_map, user_hotspots, user_stability, grid_poi_features
@@ -91,7 +116,12 @@ def run_cvae(
 def main() -> None:
     parser = argparse.ArgumentParser(description="DataMining final project pipeline")
     parser.add_argument("--city-path", type=str, help="Path to city CSV, e.g. raw_data/nagoya_challengedata.csv")
+    parser.add_argument("--max-users", type=int, help="Use the first N uid values after sorting")
+    parser.add_argument("--sample-users", type=int, help="Randomly sample N uid values")
+    parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument("--chunksize", type=int, help="Read CSV in chunks of this many rows")
     parser.add_argument("--skip-features", action="store_true")
+    parser.add_argument("--fetch-poi", action="store_true", help="Fetch POI data from OpenStreetMap Overpass API")
     parser.add_argument("--run-baselines", action="store_true")
     parser.add_argument("--run-cvae", action="store_true")
     parser.add_argument("--cvae-epochs", type=int, default=1)
@@ -104,12 +134,18 @@ def main() -> None:
     if not Path(args.city_path).exists():
         raise FileNotFoundError(args.city_path)
 
-    train_df, test_df, grid_latlon = run_preprocessing(args.city_path)
+    train_df, test_df, grid_latlon = run_preprocessing(
+        args.city_path,
+        max_users=args.max_users,
+        sample_users=args.sample_users,
+        random_seed=args.random_seed,
+        chunksize=args.chunksize,
+    )
     print(f"train rows={len(train_df):,}, test rows={len(test_df):,}")
 
     feature_outputs = None
     if not args.skip_features or args.run_cvae:
-        feature_outputs = run_feature_engineering(train_df, grid_latlon)
+        feature_outputs = run_feature_engineering(train_df, grid_latlon, fetch_poi=args.fetch_poi)
     if args.run_baselines:
         run_baselines(train_df, test_df)
     if args.run_cvae:

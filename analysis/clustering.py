@@ -15,6 +15,15 @@ DEFAULT_POI_COLUMNS = [
     "poi_leisure",
 ]
 
+POI_TYPE_MAP = {
+    "station": "station",
+    "school": "school",
+    "hospital": "hospital",
+    "restaurant": "restaurant",
+    "shop": "shop",
+    "leisure": "leisure",
+}
+
 
 def compute_grid_density(df: pd.DataFrame) -> pd.DataFrame:
     """Count visits per grid cell."""
@@ -96,12 +105,13 @@ def fetch_poi_from_osm(
     rows = []
     for node in result.nodes:
         tags = dict(node.tags)
-        poi_type = (
+        raw_type = (
             tags.get("amenity")
             or ("shop" if "shop" in tags else None)
             or ("leisure" if "leisure" in tags else None)
             or "unknown"
         )
+        poi_type = POI_TYPE_MAP.get(raw_type, raw_type)
         rows.append({"osm_id": int(node.id), "poi_type": poi_type, "lat": float(node.lat), "lon": float(node.lon)})
     return pd.DataFrame(rows, columns=["osm_id", "poi_type", "lat", "lon"])
 
@@ -123,13 +133,26 @@ def assign_poi_to_grid(poi_df: pd.DataFrame, grid_latlon: pd.DataFrame) -> pd.Da
 def build_grid_poi_features(poi_grid: pd.DataFrame) -> pd.DataFrame:
     """Build per-grid POI count features and save them."""
     if poi_grid.empty:
-        features = pd.DataFrame(columns=["x", "y", *DEFAULT_POI_COLUMNS, "poi_total"])
+        xs, ys = np.meshgrid(range(GRID_SIZE), range(GRID_SIZE), indexing="ij")
+        features = pd.DataFrame({"x": xs.ravel(), "y": ys.ravel()})
+        for column in DEFAULT_POI_COLUMNS:
+            features[column] = 0
+        features["poi_total"] = 0
     else:
+        normalized = poi_grid.copy()
+        normalized["poi_type"] = normalized["poi_type"].map(lambda value: POI_TYPE_MAP.get(str(value), str(value)))
         pivot = (
-            poi_grid.assign(column="poi_" + poi_grid["poi_type"].astype(str))
+            normalized.assign(column="poi_" + normalized["poi_type"].astype(str))
             .pivot_table(index=["x", "y"], columns="column", values="osm_id", aggfunc="count", fill_value=0)
             .reset_index()
         )
+        all_cells = pd.DataFrame(
+            {
+                "x": np.repeat(np.arange(GRID_SIZE), GRID_SIZE),
+                "y": np.tile(np.arange(GRID_SIZE), GRID_SIZE),
+            }
+        )
+        pivot = all_cells.merge(pivot, on=["x", "y"], how="left").fillna(0)
         for column in DEFAULT_POI_COLUMNS:
             if column not in pivot:
                 pivot[column] = 0
