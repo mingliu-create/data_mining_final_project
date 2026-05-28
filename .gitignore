@@ -47,3 +47,12 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+
+# Keep folder documentation tracked while generated artifacts stay ignored.
+!eval/reports/
+!eval/reports/README.md
+!models/checkpoints/
+!models/checkpoints/README.md
+!output/
+!output/figures/
+!output/figures/README.md

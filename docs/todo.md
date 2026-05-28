@@ -5,94 +5,148 @@
 
 ---
 
-## 已完成 ✅
+## 已完成
 
-- [x] 撰寫規格書（`docs/proposal.md`）
-- [x] 撰寫概要設計文件（`docs/high-level-design.md`）
-- [x] 撰寫詳細設計文件（`docs/detail-design.md`）
-- [x] 實作 `data/loader.py`：讀取 CSV、過濾異常值、切分訓練／測試集
-- [x] 實作 `data/preprocessing.py`：平假日 K-means 標記、座標轉換公式、`build_grid_latlon_table`
-- [x] 產出 `data/grid_to_latlon.csv`（40,000 行，含中心點與邊界框）
-- [x] 確認座標系統：`x(0→199)` = 南→北，`y(0→199)` = 西→東；邊界框已知
-- [x] 實作 `analysis/eda.py`：
-  - `plot_unique_users_map`（白底，Reds，log 正規化透明度）
-  - `plot_spatial_heatmap`（log scale，hot colormap）
-  - `build_trajectory_density`（Bresenham 線段累積）
-  - `plot_trajectory_map`（黑底，hot colormap）
-  - `plot_daily_active_users`（折線圖，d=60 切分線）
-- [x] 產出 `output/figures/unique_users_map.png`（方向已確認正確）
-
----
-
-## 待完成 ⏳
-
-### 優先序 1 — 評估流程（盡早驗通）
-
-- [ ] 實作 `eval/metrics.py`
-  - `validate_submission()`：呼叫 geobleu validator
-  - `compute_geobleu()`：Beta=0.5, n=5，`calc_geobleu_bulk()`
-  - `compute_fde()`：Final Displacement Error
-  - `generate_report()`：JSON + CSV 格式
-
-### 優先序 2 — Baseline 模型（取得本地基準分）
-
-- [ ] 實作 `models/baseline.py`
-  - `predict_per_user_mode()`：依 (weekday, t) 取眾數，三層 fallback
-  - `predict_per_user_mean()`：依 (weekday, t) 取平均
-  - `predict_bigram()`：轉移表，支援 top_p sampling
-  - `run_all_baselines()`：執行全部並輸出 GEO-BLEU 報告
-  - 目標：在本地復現 Per-User Mode ≈ 0.10789
-
-### 優先序 3 — 特徵工程
-
-- [ ] 實作 `analysis/clustering.py`（HDBSCAN）
-  - `compute_grid_density()`：統計每格出現次數
-  - `run_hdbscan()`：以密度網格執行 HDBSCAN
-  - `assign_user_hotspots()`：每人 top-N 熱點 ID
-  - `fetch_poi_from_osm()`：以 Overpass API 查詢名古屋 POI
-  - `assign_poi_to_grid()`：POI 對齊最近網格
-  - `build_grid_poi_features()`：每格各類 POI 數量，輸出 `data/grid_poi_features.csv`
-
-- [ ] 實作 `analysis/trajectory.py`（個人移動規律）
-  - `compute_location_repeat_rate()`：同 (weekday, t) 回到同格的比例
-  - `compute_day_type_entropy()`：工作日／假日移動分布熵
-  - `classify_mobility_type()`：K-means 移動類型分群（k=4）
-  - `build_user_stability_features()`：輸出 `data/user_stability_features.csv`
-
-### 優先序 4 — 深度模型
-
-- [ ] 實作 `models/cvae.py`（Conditional VAE）
-  - `TrajectoryEncoder`：LSTM encoder → (mu, log_var)
-  - `TrajectoryDecoder`：LSTM decoder → 重建軌跡
-  - `CVAE`：整合 encoder/decoder，`reparameterize`，`sample`
-  - `cvae_loss()`：MSE + beta * KL
-  - `build_condition_vector()`：組裝條件向量 y（熱點 ID + POI + 穩定性 + is_holiday + weekday）
-  - `train_cvae()`：訓練迴圈，每 epoch 儲存 checkpoint
-  - `predict_trajectories()`：推論 Days 61–75
-
-- [ ] 實作 `main.py`：串接所有模組的完整執行入口
+- [x] 撰寫規格書：`docs/proposal.md`
+- [x] 撰寫概要設計文件：`docs/high-level-design.md`
+- [x] 撰寫詳細設計文件：`docs/detail-design.md`
+- [x] 實作 `data/loader.py`
+  - 讀取 `uid,d,t,x,y` 格式 CSV
+  - 驗證必要欄位
+  - 過濾異常座標與時間
+  - 支援 train/test 切分
+  - 支援 train/validation/test 切分
+  - 支援競賽資料中的 `x=999` prediction template
+- [x] 實作 `data/preprocessing.py`
+  - K-means 平假日標記
+  - `day_of_week` / `working_day` 輔助欄位
+  - grid heatmap
+  - `grid_to_latlon`
+  - `build_grid_latlon_table`
+- [x] 產出 `data/grid_to_latlon.csv`
+- [x] 確認座標系統
+  - `x(0→199)` = 南→北
+  - `y(0→199)` = 西→東
+- [x] 實作 `analysis/eda.py`
+  - `plot_unique_users_map`
+  - `plot_spatial_heatmap`
+  - `build_trajectory_density`
+  - `plot_trajectory_map`
+  - `plot_daily_active_users`
+- [x] 建立資料夾說明文件
+  - `README.md`
+  - `analysis/README.md`
+  - `data/README.md`
+  - `eval/README.md`
+  - `eval/reports/README.md`
+  - `models/README.md`
+  - `models/checkpoints/README.md`
+  - `output/figures/README.md`
 
 ---
 
-## 待確認 ⚠️
+## 優先序 1：評估流程
 
-- [ ] **訓練資料規模**：是否使用全體 ~100,000 名使用者，或取活躍天數 ≥ 30 天的子集？  
-  影響：`loader.py` 過濾邏輯、CVAE 訓練時間與記憶體
+- [x] 實作 `eval/metrics.py`
+  - [x] `validate_submission()`：驗證 uid、t、x、y 合法性
+  - [x] `compute_geobleu()`：封裝 GEO-BLEU，支援 `calc_geobleu_bulk` 與 per-user fallback
+  - [x] `compute_fde()`：Final Displacement Error
+  - [x] `generate_report()`：輸出 JSON + CSV 到 `eval/reports/`
+- [x] 完成最小案例驗證
+  - 相同軌跡 FDE = `0.0`
+  - 相同軌跡 GEO-BLEU = `1.0`
 
-## 已確認（設計決策）✅
+---
 
-- **資料切分策略（2026-05-28 確認）**：
-  - `Days 1–50`：訓練集（train）
-  - `Days 51–60`：驗證集（validation），用於超參數調整
-  - `Days 61–75`：競賽測試集（test），僅用於最終 GEO-BLEU 評估
-  - 最終提交前，以 Days 1–60 全量重新訓練一次
-  - 需在 `data/loader.py` 新增 `split_train_val_test()` 函式
+## 優先序 2：Baseline 模型
 
-- **CVAE 訓練流程（2026-05-28 確認）**：
-  - 本地完成所有模組的實作與單元測試（不含實際訓練）
-  - 透過 GitHub 推送至有 GPU 的訓練機器
-  - 訓練機器執行 `uv sync` 安裝依賴後，以 `main.py` 啟動訓練
-  - checkpoint 存於 `models/checkpoints/`，訓練結果與評估報告存於 `eval/reports/`
+- [x] 實作 `models/baseline.py`
+  - [x] `predict_per_user_mode()`：依 `(weekday, t)` 取眾數，含三層 fallback
+  - [x] `predict_per_user_mean()`：依 `(weekday, t)` 取平均，含 fallback
+  - [x] `predict_bigram()`：轉移表預測，支援 `top_p` sampling
+  - [x] `run_all_baselines()`：執行 baseline 並輸出 GEO-BLEU/FDE 報告
+- [ ] 使用完整真實資料復現 Per-User Mode 約 `0.10789`
+
+---
+
+## 優先序 3：特徵工程
+
+- [x] 實作 `analysis/clustering.py`
+  - [x] `compute_grid_density()`：統計每格出現次數
+  - [x] `run_hdbscan()`：HDBSCAN 分群；本機未安裝 `hdbscan` 時 fallback 到 DBSCAN
+  - [x] `assign_user_hotspots()`：每人 top-N hotspot ID
+  - [x] `fetch_poi_from_osm()`：Overpass API 查詢 POI
+  - [x] `assign_poi_to_grid()`：POI 對齊最近網格
+  - [x] `build_grid_poi_features()`：輸出 `data/grid_poi_features.csv`
+- [x] 實作 `analysis/trajectory.py`
+  - [x] `compute_location_repeat_rate()`：同 `(weekday, t)` 回到同格比例
+  - [x] `compute_day_type_entropy()`：平日/假日移動分布熵與差異
+  - [x] `classify_mobility_type()`：K-means 移動類型分群
+  - [x] `build_user_stability_features()`：輸出 `data/user_stability_features.csv`
+
+---
+
+## 優先序 4：深度模型
+
+- [x] 實作 `models/cvae.py`
+  - [x] `TrajectoryEncoder`
+  - [x] `TrajectoryDecoder`
+  - [x] `CVAE`
+  - [x] `cvae_loss()`
+  - [x] `build_condition_vector()`
+  - [x] `build_condition_table()`
+  - [x] `train_cvae()`
+  - [x] `predict_trajectories()`
+- [x] 實作 `main.py`
+  - [x] `run_preprocessing()`
+  - [x] `run_feature_engineering()`
+  - [x] `run_baselines()`
+  - [x] `run_cvae()`
+  - [x] CLI flags：`--city-path`、`--run-baselines`、`--run-cvae`、`--cvae-epochs`、`--batch-size`
+
+---
+
+## 已確認
+
+- [x] `task1_dataset_kotae.csv` 可以讀取
+- [x] `task1_dataset_kotae.csv` 欄位符合專案格式：`uid,d,t,x,y`
+- [x] `task1_dataset_kotae.csv` 天數看起來符合 `d=0–74`
+- [x] `uv sync` 已完成
+- [x] `geobleu`、`hdbscan`、`torch` 可正常 import
+
+---
+
+## 尚未完成
+
+- [ ] 將 `task1_dataset_kotae.csv` 納入正式執行流程
+  - 目前檔案在專案外層：`D:\新增資料夾 (7)\資料探勘\task1_dataset_kotae.csv`
+  - 可直接用完整路徑執行
+- [ ] 使用完整真實資料執行 baseline
+- [ ] 確認 Per-User Mode 是否能復現官方約 `0.10789`
+- [ ] 執行完整 feature engineering
+- [ ] 執行 CVAE smoke run
+- [ ] 決定 CVAE 訓練資料規模
+  - 選項 A：使用全體約 100,000 名使用者
+  - 選項 B：只取活躍天數 >= 30 天的子集
+- [ ] 視記憶體狀況新增 chunk/抽樣讀取模式
+  - `task1_dataset_kotae.csv` 約 2.2GB
+  - 目前 `load_city()` 會整份讀入記憶體
+
+---
+
+## 下一步指令
+
+先跑 baseline：
+
+```bash
+python main.py --city-path "D:\新增資料夾 (7)\資料探勘\task1_dataset_kotae.csv" --skip-features --run-baselines
+```
+
+baseline 正常後，再跑特徵工程與短輪 CVAE：
+
+```bash
+python main.py --city-path "D:\新增資料夾 (7)\資料探勘\task1_dataset_kotae.csv" --run-cvae --cvae-epochs 1
+```
 
 ---
 
@@ -101,4 +155,4 @@
 | 方法 | GEO-BLEU |
 |------|----------|
 | 官方最佳 Baseline（Per-User Mode） | 0.10789 |
-| **我們的目標（CVAE）** | **> 0.10789** |
+| 目標（CVAE） | > 0.10789 |
